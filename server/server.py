@@ -1,24 +1,36 @@
 from flask import Flask, request, jsonify
 import uuid
 from tinydb import TinyDB,Query
+import datetime
 
 app = Flask(__name__)
 
-users = {}
-login_sessions = {}
-
 DB = TinyDB("Users.json")
-Data = Query()
+
+users = DB.table("users")
+login_sessions = DB.table("Sessions")
+public_key_db = DB.table("Public_Keys")
+
+UserQ = Query()
+SessionQ = Query()
+PubKeyQ = Query()
+
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
     username = data['username']
     device_id = data['device_id']
-    if username not in users:
-        users[username] = {"devices": [device_id]}
+    user = users.search(UserQ.user == username) or None
+    if user is None:
+        document = {
+            'user':user,
+            "devices":[data.get("device_id")]
+        }
+        users.upsert({users[username] : [device_id]},UserQ.user == user)
     else:
-        if device_id not in users[username]["devices"]:
-            users[username]["devices"].append(device_id)
+        if device_id not in users.get("devices",[]):
+            new_devices = user.get("devices", []) + [device_id]
+            users.update({"devices": new_devices}, UserQ.username == username)
     return jsonify({"status": "ok", "username": username, "device_id": device_id}), 201
 
 @app.route('/login/request', methods=['POST'])
@@ -59,7 +71,7 @@ def rec_public_key():
             'public_key':data.get("Pub_key"),
             "device":data.get("device_id")
         }
-        DB.upsert(document,Data.record_id == document.get("record_id"))
+        public_key_db.upsert(document,PubKeyQ.record_id == document.get("record_id"))
         return jsonify({"status":"OK","msg" :"successfully add to db"}) , 200
     except Exception as e:
         return jsonify({"status":"Err","msg":str(e)}), 500
