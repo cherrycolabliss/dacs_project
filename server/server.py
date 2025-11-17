@@ -2,11 +2,16 @@ from flask import Flask, request, jsonify
 import uuid
 from tinydb import TinyDB,Query
 import datetime
+from flask import make_response
 
 app = Flask(__name__)
 
-DB = TinyDB("Users.json")
+DB = TinyDB("DB.json")
 
+registerPage = open("webui/register.html").read()
+loginPage = open("webui/login.html").read()
+style = open("webui/style.css").read()
+script = open("webui/script.js").read()
 users = DB.table("users")
 login_sessions = DB.table("Sessions")
 public_key_db = DB.table("Public_Keys")
@@ -26,7 +31,7 @@ def register():
             'user':user,
             "devices":[data.get("device_id")]
         }
-        users.upsert({users[username] : [device_id]},UserQ.user == user)
+        users.upsert({username : [device_id]},UserQ.user == user)
     else:
         if device_id not in users.get("devices",[]):
             new_devices = user.get("devices", []) + [device_id]
@@ -76,7 +81,25 @@ def rec_public_key():
     except Exception as e:
         return jsonify({"status":"Err","msg":str(e)}), 500
     
+@app.route("/register")
+def registerpage():
+    return registerPage
 
+@app.route("/")
+def loginpage():
+    return make_response(loginPage)
+
+@app.route("/style.css")
+def styling():
+    res = make_response(style)
+    res.headers['Content-Type'] = 'text/css; charset=utf-8'
+    return res
+
+@app.route("/script.js")
+def jsscript():
+    res = make_response(script)
+    res.headers['Content-Type'] = 'text/javascript; charset=utf-8'
+    return res
 
 if __name__ == '__main__':
     app.run(debug=True)
