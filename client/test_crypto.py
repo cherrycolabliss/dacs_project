@@ -1,4 +1,5 @@
 from crypto_store import encrypt_secret, decrypt_secret
+from client.challenge_response_test import test_connection
 
 if __name__ == "__main__":
     secret = b"this_is_my_private_key"
@@ -8,3 +9,4 @@ if __name__ == "__main__":
     encrypt_secret(secret, pin, path)
     recovered = decrypt_secret(pin, path)
     print("Decrypted secret:", recovered)
+    test_connection()

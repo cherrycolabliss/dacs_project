@@ -9,7 +9,9 @@ import io
 import json
 from flask import jsonify
 import random
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 
 
@@ -63,7 +65,7 @@ def privateKeyAES(private_pem: bytes, user,filename: str = None) -> None:
 
     # Save to file if filename provided
     if not filename:
-        filename = f"private_key_enc_{uuid.uuid4().hex}.json"
+        filename = f"{username}_private_key.json"
     with open(filename, "w") as f:
         json.dump(data,f)
     print("File Generated")
@@ -85,7 +87,7 @@ def gen_public_private_key(user):
         public_pem = public_key.public_bytes(
         encoding=Encoding.PEM,
         format=PublicFormat.SubjectPublicKeyInfo)
-        name = str(uuid.uuid4())+".json"
+        name = f"{user}_private_key.json"
         privateKeyAES(private_pem,user,name)
         
         file={user: {"Pub_key":public_pem.decode("utf-8"),"user":user,"device_id":["id_123234231"]} }
@@ -96,9 +98,73 @@ def gen_public_private_key(user):
         print(f"Saved Private Key as f{name}.pem")
     except Exception as e:
         print(f"Error Occured : f{str(e)}")
+
+
+#### PHASE 4 PART #####
+def load_private_key(filename, pin):
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    encrypted_blob = base64.b64decode(data["Private_Key"])
+    saved_pin = data["Pin"]
+
+    # IMPORTANT: PIN must match
+    if pin != saved_pin:
+        raise ValueError("Incorrect PIN")
+
+    # Extract salt + nonce + ciphertext
+    salt = encrypted_blob[:16]
+    nonce = encrypted_blob[16:28]
+    ciphertext = encrypted_blob[28:]
+
+    # Derive AES key from PIN
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=200_000,
+    )
+    key = kdf.derive(pin.encode())
+
+    aesgcm = AESGCM(key)
+    private_pem = aesgcm.decrypt(nonce, ciphertext, None)
+
+    # Convert PEM bytes → RSA private_key object
+    private_key = serialization.load_pem_private_key(private_pem, password=None)
+
+    return private_key
+
+
+def request_challenge(user):
+    res = requests.post(f"{SERVER}/request_challenge", json={"user": user})
+
+    print("Raw server response:", res.text)   
+    print("Status code:", res.status_code)    
     
+    data = res.json()
+    print("Challenge:", data)
+    return base64.b64decode(data["challenge"])
+
+def sign_challenge(private_key, challenge):
+    signature = private_key.sign(
+        challenge,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    return base64.b64encode(signature).decode()
+
+def send_signature(user, signature_b64):
+    res = requests.post(
+        f"{SERVER}/verify_signature",
+        json={"user": user, "signature": signature_b64}
+    )
+    print("Server response:", res.json())
 
 
+        
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         print("Usage: python client.py [register|login] <username> <device_id>")
@@ -111,3 +177,29 @@ if __name__ == "__main__":
         login(username, device_id)
     elif action == "get_keys":
         gen_public_private_key(username)
+    
+    elif action == "auth":
+        # Load private key from encrypted file
+        filename = f"{username}_private_key.json"
+        pin = input("Enter your PIN: ")
+        private_key = load_private_key(filename, pin) 
+
+        try:
+            private_key = load_private_key(filename, pin)
+            print("Private key successfully decrypted.")
+        except Exception as e:
+            print("Error decrypting private key:", e)
+            sys.exit(1)
+
+        # Step 1: Get challenge
+        challenge = request_challenge(username)
+
+        # Step 2: Sign challenge
+        try:
+            signature_b64 = sign_challenge(private_key, challenge)
+        except Exception as e:
+            print("Error signing challenge:", e)
+            sys.exit(1)
+
+        # Step 3: Send signature back
+        send_signature(username, signature_b64)
