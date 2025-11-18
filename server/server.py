@@ -59,7 +59,7 @@ def login_request():
 
 @app.route('/login/response', methods=['POST'])
 def login_response():
-    data = request.json
+    data = request.jsonss
     session_id = data['session']
     response = data['response']
     if session_id not in login_sessions:

@@ -6,6 +6,23 @@ python -m venv dacs_project
 source activate
 pip install -r requirments.txt
 ```
+
+# HOW TO RUN AND TEST
+- Open the code
+- Run the server
+- Run this to generate a private key json file
+``` 
+python client.py get_keys alice device123
+```
+- Open the private key json file and scroll to the very right to find the PIN
+- Run this to authenticate the challenge and response with the server, make sure to use the PIN in the private key
+```
+python client.py auth alice device123
+```
+- Error happens here, we fix later
+
+
+
 # TODO
 - Use TinyDB For The System Cause Why is the Users and rest of data only in ram?
 
@@ -25,10 +42,13 @@ Have the client generate a real public/private key pair. Keep the private key lo
 associate it with the user/device. The server now knows who you are by public key, not
 password.
 
-- [ ] Phase 4: Passwordless Challenge–Response Login
+- [x] Phase 4: Passwordless Challenge–Response Login
 Implement the real login flow: the server sends a random challenge; the client signs it
 with its private key; the server verifies the signature using the stored public key. No
 password is ever transmitted or stored.
+
+- [ ] Phase 4.5: Fix Server Database Issue
+  Bruh I really can't, just try running it yourself
 
 - [ ] Phase 5: Integrity / Device Binding with Hashing
 When a device registers, the server stores its public key and device info, and also
